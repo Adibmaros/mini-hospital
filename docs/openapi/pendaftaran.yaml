@@ -1,0 +1,102 @@
+openapi: 3.0.3
+info:
+  title: Sistem Pendaftaran API
+  version: 1.0.0
+  description: API Spesifikasi untuk Sistem Pendaftaran Pasien dan Antrean Kunjungan Poli.
+paths:
+  /api/health:
+    get:
+      summary: Health Check
+      responses:
+        '200':
+          description: Service operational
+  /api/kunjungan:
+    get:
+      summary: Daftar Kunjungan & Antrean
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - in: query
+          name: tanggal
+          schema:
+            type: string
+            format: date
+        - in: query
+          name: poli
+          schema:
+            type: string
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: [menunggu, selesai]
+      responses:
+        '200':
+          description: Berhasil mengambil daftar kunjungan
+        '401':
+          description: Unauthorized
+  /api/kunjungan/{id}:
+    get:
+      summary: Detail Kunjungan
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Detail kunjungan ditemukan
+        '404':
+          description: Kunjungan tidak ditemukan
+  /api/kunjungan/{id}/status:
+    patch:
+      summary: Ubah Status Kunjungan
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                status:
+                  type: string
+                  enum: [selesai]
+      responses:
+        '200':
+          description: Status kunjungan berhasil diperbarui
+        '409':
+          description: Transisi status tidak valid
+  /api/pasien/{id}:
+    get:
+      summary: Detail Data Pasien
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Data pasien ditemukan
+        '404':
+          description: Pasien tidak ditemukan
+
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-KEY

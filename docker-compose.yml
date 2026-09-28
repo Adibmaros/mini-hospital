@@ -1,0 +1,161 @@
+version: '3.8'
+
+networks:
+  hospital-net:
+    driver: bridge
+
+volumes:
+  db_pendaftaran_data:
+  db_rekam_medis_data:
+  db_farmasi_data:
+
+services:
+  db-pendaftaran:
+    image: mysql:8.0
+    container_name: db-pendaftaran
+    environment:
+      MYSQL_ROOT_PASSWORD: ${PD_DB_ROOT_PASS:-root_pass}
+      MYSQL_DATABASE: ${PD_DB_NAME:-db_pendaftaran}
+      MYSQL_USER: ${PD_DB_USER:-pendaftaran}
+      MYSQL_PASSWORD: ${PD_DB_PASS:-pendaftaran_pass}
+      TZ: ${TZ:-Asia/Jakarta}
+    volumes:
+      - db_pendaftaran_data:/var/lib/mysql
+      - ./db/pendaftaran/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - hospital-net
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${PD_DB_ROOT_PASS:-root_pass}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  db-rekam-medis:
+    image: mysql:8.0
+    container_name: db-rekam-medis
+    environment:
+      MYSQL_ROOT_PASSWORD: ${RM_DB_ROOT_PASS:-root_pass}
+      MYSQL_DATABASE: ${RM_DB_NAME:-db_rekam_medis}
+      MYSQL_USER: ${RM_DB_USER:-rekam_medis}
+      MYSQL_PASSWORD: ${RM_DB_PASS:-rekam_medis_pass}
+      TZ: ${TZ:-Asia/Jakarta}
+    volumes:
+      - db_rekam_medis_data:/var/lib/mysql
+      - ./db/rekam-medis/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - hospital-net
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${RM_DB_ROOT_PASS:-root_pass}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  db-farmasi:
+    image: mysql:8.0
+    container_name: db-farmasi
+    environment:
+      MYSQL_ROOT_PASSWORD: ${FA_DB_ROOT_PASS:-root_pass}
+      MYSQL_DATABASE: ${FA_DB_NAME:-db_farmasi}
+      MYSQL_USER: ${FA_DB_USER:-farmasi}
+      MYSQL_PASSWORD: ${FA_DB_PASS:-farmasi_pass}
+      TZ: ${TZ:-Asia/Jakarta}
+    volumes:
+      - db_farmasi_data:/var/lib/mysql
+      - ./db/farmasi/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - hospital-net
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${FA_DB_ROOT_PASS:-root_pass}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  pendaftaran:
+    build:
+      context: ./pendaftaran
+      dockerfile: Dockerfile
+    container_name: app-pendaftaran
+    ports:
+      - "8001:80"
+    environment:
+      TZ: ${TZ:-Asia/Jakarta}
+      API_KEY: ${API_KEY:-ganti-dengan-kunci-rahasia}
+      DB_HOST: ${PD_DB_HOST:-db-pendaftaran}
+      DB_NAME: ${PD_DB_NAME:-db_pendaftaran}
+      DB_USER: ${PD_DB_USER:-pendaftaran}
+      DB_PASS: ${PD_DB_PASS:-pendaftaran_pass}
+    networks:
+      - hospital-net
+    depends_on:
+      db-pendaftaran:
+        condition: service_healthy
+
+  rekam-medis:
+    build:
+      context: ./rekam-medis
+      dockerfile: Dockerfile
+    container_name: app-rekam-medis
+    ports:
+      - "8002:80"
+    environment:
+      TZ: ${TZ:-Asia/Jakarta}
+      API_KEY: ${API_KEY:-ganti-dengan-kunci-rahasia}
+      DB_HOST: ${RM_DB_HOST:-db-rekam-medis}
+      DB_NAME: ${RM_DB_NAME:-db_rekam_medis}
+      DB_USER: ${RM_DB_USER:-rekam_medis}
+      DB_PASS: ${RM_DB_PASS:-rekam_medis_pass}
+      PENDAFTARAN_URL: ${PENDAFTARAN_URL:-http://pendaftaran}
+      FARMASI_URL: ${FARMASI_URL:-http://farmasi}
+    networks:
+      - hospital-net
+    depends_on:
+      db-rekam-medis:
+        condition: service_healthy
+      pendaftaran:
+        condition: service_started
+      farmasi:
+        condition: service_started
+
+  farmasi:
+    build:
+      context: ./farmasi
+      dockerfile: Dockerfile
+    container_name: app-farmasi
+    ports:
+      - "8003:80"
+    environment:
+      TZ: ${TZ:-Asia/Jakarta}
+      API_KEY: ${API_KEY:-ganti-dengan-kunci-rahasia}
+      DB_HOST: ${FA_DB_HOST:-db-farmasi}
+      DB_NAME: ${FA_DB_NAME:-db_farmasi}
+      DB_USER: ${FA_DB_USER:-farmasi}
+      DB_PASS: ${FA_DB_PASS:-farmasi_pass}
+      PENDAFTARAN_URL: ${PENDAFTARAN_URL:-http://pendaftaran}
+    networks:
+      - hospital-net
+    depends_on:
+      db-farmasi:
+        condition: service_healthy
+
+  phpmyadmin:
+    image: phpmyadmin:5
+    container_name: app-phpmyadmin
+    ports:
+      - "8080:80"
+    environment:
+      PMA_HOSTS: db-pendaftaran,db-rekam-medis,db-farmasi
+      PMA_ARBITRARY: 1
+    networks:
+      - hospital-net
+
+  swagger-ui:
+    image: swaggerapi/swagger-ui
+    container_name: app-swagger-ui
+    ports:
+      - "8081:8080"
+    environment:
+      URLS: "[{url: 'openapi/pendaftaran.yaml', name: 'Sistem Pendaftaran'}, {url: 'openapi/rekam-medis.yaml', name: 'Sistem Rekam Medis'}, {url: 'openapi/farmasi.yaml', name: 'Sistem Farmasi'}]"
+    volumes:
+      - ./docs/openapi:/usr/share/nginx/html/openapi
+    networks:
+      - hospital-net

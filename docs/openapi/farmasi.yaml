@@ -1,0 +1,127 @@
+openapi: 3.0.3
+info:
+  title: Sistem Farmasi API
+  version: 1.0.0
+  description: API Spesifikasi untuk Sistem Farmasi (Penyiapan Obat & Master Inventaris).
+paths:
+  /api/health:
+    get:
+      summary: Health Check
+      responses:
+        '200':
+          description: Service operational
+  /api/resep:
+    post:
+      summary: Terima Resep Baru dari Rekam Medis
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [id_rm, id_pasien, items]
+              properties:
+                id_rm:
+                  type: integer
+                id_pasien:
+                  type: integer
+                items:
+                  type: array
+                  items:
+                    type: object
+                    required: [id_resep, nama_obat, dosis, jumlah, aturan_pakai]
+                    properties:
+                      id_resep:
+                        type: integer
+                      nama_obat:
+                        type: string
+                      dosis:
+                        type: string
+                      jumlah:
+                        type: integer
+                      aturan_pakai:
+                        type: string
+      responses:
+        '201':
+          description: Resep berhasil diterima
+        '409':
+          description: Idempotency fail (id_resep sudah ada)
+        '422':
+          description: Validasi gagal (obat tidak ada di master)
+    get:
+      summary: Daftar Resep per RM
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - in: query
+          name: id_rm
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Daftar item resep
+  /api/resep/{id}:
+    get:
+      summary: Status Item Resep
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Status item resep ditemukan
+        '404':
+          description: Resep tidak ditemukan
+  /api/resep/{id}/status:
+    patch:
+      summary: Ubah Status Resep (Tandai Selesai)
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                status:
+                  type: string
+                  enum: [selesai]
+      responses:
+        '200':
+          description: Resep selesai disiapkan, stok berkurang
+        '409':
+          description: Stok tidak mencukupi / transisi status tidak valid
+  /api/obat:
+    get:
+      summary: Daftar Master Obat
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - in: query
+          name: q
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Daftar obat master
+
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-KEY
