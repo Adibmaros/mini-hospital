@@ -2,97 +2,320 @@ openapi: 3.0.3
 info:
   title: Sistem Pendaftaran API
   version: 1.0.0
-  description: API Spesifikasi untuk Sistem Pendaftaran Pasien dan Antrean Kunjungan Poli.
+  description: >
+    API Spesifikasi untuk Sistem Pendaftaran Pasien dan Antrean Kunjungan Poli pada arsitektur Mini Hospital EAI.
+    Seluruh API yang membutuhkan autentikasi wajib menyertakan header `X-API-KEY`.
+servers:
+  - url: http://localhost:8001
+    description: Sistem Pendaftaran (Port 8001)
+
 paths:
   /api/health:
     get:
       summary: Health Check
+      description: Memeriksa ketersediaan dan status operasional Sistem Pendaftaran.
       responses:
         '200':
           description: Service operational
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+              example:
+                status: success
+                message: Sistem Pendaftaran operational
+                timestamp: '2026-09-28T14:00:00+07:00'
+
   /api/kunjungan:
     get:
       summary: Daftar Kunjungan & Antrean
+      description: Mengambil daftar kunjungan pasien per tanggal, poli, atau status antrean.
       security:
         - ApiKeyAuth: []
       parameters:
         - in: query
           name: tanggal
+          description: Tanggal kunjungan (format YYYY-MM-DD). Default adalah tanggal hari ini.
+          required: false
           schema:
             type: string
             format: date
+          example: '2026-09-28'
         - in: query
           name: poli
+          description: Filter berdasarkan nama poli tujuan.
+          required: false
           schema:
             type: string
+            enum: [Umum, Gigi, Anak]
+          example: Umum
         - in: query
           name: status
+          description: Filter berdasarkan status kunjungan.
+          required: false
           schema:
             type: string
             enum: [menunggu, selesai]
+          example: menunggu
       responses:
         '200':
           description: Berhasil mengambil daftar kunjungan
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  message:
+                    type: string
+                    example: OK
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Kunjungan'
+              example:
+                status: success
+                message: OK
+                data:
+                  - id_kunjungan: 1
+                    tgl_kunjungan: '2026-09-28'
+                    poli: Umum
+                    no_antrean: 1
+                    status: menunggu
+                    created_at: '2026-09-28 08:00:00'
+                    pasien:
+                      id_pasien: 1
+                      no_rm: RM-000001
+                      nama: Budi Santoso
+                      tgl_lahir: '1988-05-15'
+                      jenis_kelamin: L
+                      alamat: Jl. Merdeka No. 45
+                      no_hp: '081234567890'
         '401':
-          description: Unauthorized
+          description: Unauthorized - API Key tidak valid atau tidak disertakan
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                status: error
+                message: 'Unauthorized: API Key tidak valid atau tidak disertakan'
+
   /api/kunjungan/{id}:
     get:
       summary: Detail Kunjungan
+      description: Mengambil data detail satu kunjungan beserta data lengkap pasien terkait.
       security:
         - ApiKeyAuth: []
       parameters:
         - in: path
           name: id
+          description: ID kunjungan
           required: true
           schema:
             type: integer
+          example: 1
       responses:
         '200':
           description: Detail kunjungan ditemukan
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  message:
+                    type: string
+                    example: OK
+                  data:
+                    $ref: '#/components/schemas/Kunjungan'
+              example:
+                status: success
+                message: OK
+                data:
+                  id_kunjungan: 1
+                  tgl_kunjungan: '2026-09-28'
+                  poli: Umum
+                  no_antrean: 1
+                  status: menunggu
+                  created_at: '2026-09-28 08:00:00'
+                  pasien:
+                    id_pasien: 1
+                    no_rm: RM-000001
+                    nama: Budi Santoso
+                    tgl_lahir: '1988-05-15'
+                    jenis_kelamin: L
+                    alamat: Jl. Merdeka No. 45
+                    no_hp: '081234567890'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                status: error
+                message: 'Unauthorized: API Key tidak valid atau tidak disertakan'
         '404':
           description: Kunjungan tidak ditemukan
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                status: error
+                message: Kunjungan tidak ditemukan
+
   /api/kunjungan/{id}/status:
     patch:
       summary: Ubah Status Kunjungan
+      description: Memperbarui status kunjungan dari 'menunggu' menjadi 'selesai' (A6).
       security:
         - ApiKeyAuth: []
       parameters:
         - in: path
           name: id
+          description: ID kunjungan
           required: true
           schema:
             type: integer
+          example: 1
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
+              required: [status]
               properties:
                 status:
                   type: string
                   enum: [selesai]
+                  example: selesai
       responses:
         '200':
           description: Status kunjungan berhasil diperbarui
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  message:
+                    type: string
+                    example: Status kunjungan berhasil diperbarui menjadi selesai
+                  data:
+                    type: object
+                    properties:
+                      id_kunjungan:
+                        type: integer
+                        example: 1
+                      status:
+                        type: string
+                        example: selesai
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                status: error
+                message: 'Unauthorized: API Key tidak valid atau tidak disertakan'
+        '404':
+          description: Kunjungan tidak ditemukan
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                status: error
+                message: Kunjungan tidak ditemukan
         '409':
-          description: Transisi status tidak valid
+          description: Transisi status tidak valid (bukan menunggu)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                status: error
+                message: 'Transisi status tidak valid. Hanya kunjungan berstatus "menunggu" yang dapat diubah ke "selesai"'
+        '422':
+          description: Status tidak valid
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                status: error
+                message: 'Status tidak valid. Hanya menerima status "selesai"'
+
   /api/pasien/{id}:
     get:
       summary: Detail Data Pasien
+      description: Mengambil data identitas pasien berdasarkan ID pasien.
       security:
         - ApiKeyAuth: []
       parameters:
         - in: path
           name: id
+          description: ID pasien
           required: true
           schema:
             type: integer
+          example: 1
       responses:
         '200':
           description: Data pasien ditemukan
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  message:
+                    type: string
+                    example: OK
+                  data:
+                    $ref: '#/components/schemas/Pasien'
+              example:
+                status: success
+                message: OK
+                data:
+                  id_pasien: 1
+                  no_rm: RM-000001
+                  nama: Budi Santoso
+                  tgl_lahir: '1988-05-15'
+                  jenis_kelamin: L
+                  alamat: Jl. Merdeka No. 45
+                  no_hp: '081234567890'
+                  created_at: '2026-09-28 07:30:00'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                status: error
+                message: 'Unauthorized: API Key tidak valid atau tidak disertakan'
         '404':
           description: Pasien tidak ditemukan
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                status: error
+                message: Pasien tidak ditemukan
 
 components:
   securitySchemes:
@@ -100,3 +323,84 @@ components:
       type: apiKey
       in: header
       name: X-API-KEY
+      description: Kunci API untuk akses antarsistem (default pada .env)
+
+  schemas:
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          example: success
+        message:
+          type: string
+          example: Sistem Pendaftaran operational
+        timestamp:
+          type: string
+          example: '2026-09-28T14:00:00+07:00'
+
+    Pasien:
+      type: object
+      properties:
+        id_pasien:
+          type: integer
+          example: 1
+        no_rm:
+          type: string
+          example: RM-000001
+        nama:
+          type: string
+          example: Budi Santoso
+        tgl_lahir:
+          type: string
+          format: date
+          example: '1988-05-15'
+        jenis_kelamin:
+          type: string
+          enum: [L, P]
+          example: L
+        alamat:
+          type: string
+          example: Jl. Merdeka No. 45
+        no_hp:
+          type: string
+          example: '081234567890'
+        created_at:
+          type: string
+          example: '2026-09-28 07:30:00'
+
+    Kunjungan:
+      type: object
+      properties:
+        id_kunjungan:
+          type: integer
+          example: 1
+        tgl_kunjungan:
+          type: string
+          format: date
+          example: '2026-09-28'
+        poli:
+          type: string
+          example: Umum
+        no_antrean:
+          type: integer
+          example: 1
+        status:
+          type: string
+          enum: [menunggu, selesai]
+          example: menunggu
+        created_at:
+          type: string
+          example: '2026-09-28 08:00:00'
+        pasien:
+          $ref: '#/components/schemas/Pasien'
+
+    ErrorResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          example: error
+        message:
+          type: string
+          example: Pesan error

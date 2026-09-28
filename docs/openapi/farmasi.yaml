@@ -2,17 +2,34 @@ openapi: 3.0.3
 info:
   title: Sistem Farmasi API
   version: 1.0.0
-  description: API Spesifikasi untuk Sistem Farmasi (Penyiapan Obat & Master Inventaris).
+  description: >
+    API Spesifikasi untuk Sistem Farmasi (Penyiapan Obat & Master Inventaris).
+    Seluruh API yang membutuhkan autentikasi wajib menyertakan header `X-API-KEY`.
+servers:
+  - url: http://localhost:8003
+    description: Sistem Farmasi (Port 8003)
+
 paths:
   /api/health:
     get:
       summary: Health Check
+      description: Memeriksa ketersediaan dan status operasional Sistem Farmasi.
       responses:
         '200':
           description: Service operational
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+              example:
+                status: success
+                message: Sistem Farmasi operational
+                timestamp: '2026-09-28T14:00:00+07:00'
+
   /api/resep:
     post:
       summary: Terima Resep Baru dari Rekam Medis
+      description: Menerima kumpulan item resep dari modul pemeriksaan Rekam Medis dalam satu transaksi atomik.
       security:
         - ApiKeyAuth: []
       requestBody:
@@ -20,104 +37,357 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              required: [id_rm, id_pasien, items]
-              properties:
-                id_rm:
-                  type: integer
-                id_pasien:
-                  type: integer
-                items:
-                  type: array
-                  items:
-                    type: object
-                    required: [id_resep, nama_obat, dosis, jumlah, aturan_pakai]
-                    properties:
-                      id_resep:
-                        type: integer
-                      nama_obat:
-                        type: string
-                      dosis:
-                        type: string
-                      jumlah:
-                        type: integer
-                      aturan_pakai:
-                        type: string
+              $ref: '#/components/schemas/CreateResepRequest'
+            example:
+              id_rm: 1
+              id_pasien: 1
+              items:
+                - id_resep: 10
+                  nama_obat: Paracetamol 500 mg
+                  dosis: 500 mg
+                  jumlah: 10
+                  aturan_pakai: 3x1 sesudah makan
       responses:
         '201':
           description: Resep berhasil diterima
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  message:
+                    type: string
+                    example: Resep diterima
+                  data:
+                    type: object
+                    properties:
+                      id_rm:
+                        type: integer
+                        example: 1
+                      items:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            id_resep_masuk:
+                              type: integer
+                              example: 1
+                            id_resep:
+                              type: integer
+                              example: 10
+                            status:
+                              type: string
+                              example: menunggu
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                status: error
+                message: 'Unauthorized: API Key tidak valid atau tidak disertakan'
         '409':
-          description: Idempotency fail (id_resep sudah ada)
+          description: Idempotency fail (id_resep sudah pernah masuk)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                status: error
+                message: 'id_resep [10] sudah pernah diterima (duplikat)'
         '422':
-          description: Validasi gagal (obat tidak ada di master)
+          description: Validasi gagal (nama obat tidak ada di master obat atau field tidak lengkap)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                status: error
+                message: "Obat [Paracetamol Palsu] tidak terdaftar di master obat Farmasi."
+                errors:
+                  nama_obat: "Obat 'Paracetamol Palsu' tidak ditemukan"
+
     get:
       summary: Daftar Resep per RM
+      description: Mengambil seluruh item resep berdasarkan ID Rekam Medis (id_rm).
       security:
         - ApiKeyAuth: []
       parameters:
         - in: query
           name: id_rm
+          description: ID Rekam Medis dari sistem Rekam Medis
           required: true
           schema:
             type: integer
+          example: 1
       responses:
         '200':
-          description: Daftar item resep
+          description: Daftar item resep ditemukan
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  message:
+                    type: string
+                    example: OK
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ResepItemDetail'
+              example:
+                status: success
+                message: OK
+                data:
+                  - id_resep_masuk: 1
+                    id_resep: 10
+                    id_rm: 1
+                    id_pasien: 1
+                    nama_obat: Paracetamol 500 mg
+                    dosis: 500 mg
+                    jumlah: 10
+                    aturan_pakai: 3x1 sesudah makan
+                    status: menunggu
+                    tgl_masuk: '2026-09-28 09:00:00'
+                    tgl_selesai: null
+        '400':
+          description: Parameter id_rm diperlukan
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                status: error
+                message: Parameter id_rm diperlukan
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                status: error
+                message: 'Unauthorized: API Key tidak valid atau tidak disertakan'
+
   /api/resep/{id}:
     get:
       summary: Status Item Resep
+      description: Mengambil status satu item resep berdasarkan ID resep Rekam Medis (`id_resep`).
       security:
         - ApiKeyAuth: []
       parameters:
         - in: path
           name: id
+          description: ID resep dari Rekam Medis (bukan id_resep_masuk)
           required: true
           schema:
             type: integer
+          example: 10
       responses:
         '200':
           description: Status item resep ditemukan
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  message:
+                    type: string
+                    example: OK
+                  data:
+                    $ref: '#/components/schemas/ResepItemDetail'
+              example:
+                status: success
+                message: OK
+                data:
+                  id_resep_masuk: 1
+                  id_resep: 10
+                  id_rm: 1
+                  id_pasien: 1
+                  nama_obat: Paracetamol 500 mg
+                  dosis: 500 mg
+                  jumlah: 10
+                  aturan_pakai: 3x1 sesudah makan
+                  status: menunggu
+                  tgl_masuk: '2026-09-28 09:00:00'
+                  tgl_selesai: null
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                status: error
+                message: 'Unauthorized: API Key tidak valid atau tidak disertakan'
         '404':
           description: Resep tidak ditemukan
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                status: error
+                message: Resep tidak ditemukan
+
   /api/resep/{id}/status:
     patch:
       summary: Ubah Status Resep (Tandai Selesai)
+      description: Mengubah status item resep menjadi 'selesai' dan mengurangi stok obat di inventaris farmasi.
       security:
         - ApiKeyAuth: []
       parameters:
         - in: path
           name: id
+          description: ID resep dari Rekam Medis (`id_resep`)
           required: true
           schema:
             type: integer
+          example: 10
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
+              required: [status]
               properties:
                 status:
                   type: string
                   enum: [selesai]
+                  example: selesai
       responses:
         '200':
-          description: Resep selesai disiapkan, stok berkurang
+          description: Resep selesai disiapkan, stok obat berhasil dikurangi
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  message:
+                    type: string
+                    example: Resep berhasil diselesaikan dan stok obat telah dikurangi
+                  data:
+                    type: object
+                    properties:
+                      id_resep:
+                        type: integer
+                        example: 10
+                      nama_obat:
+                        type: string
+                        example: Paracetamol 500 mg
+                      jumlah:
+                        type: integer
+                        example: 10
+                      sisa_stok:
+                        type: integer
+                        example: 90
+                      status:
+                        type: string
+                        example: selesai
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                status: error
+                message: 'Unauthorized: API Key tidak valid atau tidak disertakan'
+        '404':
+          description: Resep tidak ditemukan
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                status: error
+                message: Resep tidak ditemukan
         '409':
-          description: Stok tidak mencukupi / transisi status tidak valid
+          description: Stok tidak mencukupi atau transisi status tidak valid
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                status: error
+                message: 'Stok tidak mencukupi untuk obat Paracetamol 500 mg (dibutuhkan: 10, tersedia: 5)'
+        '422':
+          description: Status tidak valid
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                status: error
+                message: 'Status tidak valid. Hanya menerima status "selesai"'
+
   /api/obat:
     get:
       summary: Daftar Master Obat
+      description: Mengambil daftar inventaris obat master yang terdaftar di Sistem Farmasi.
       security:
         - ApiKeyAuth: []
       parameters:
         - in: query
           name: q
+          description: Pencarian nama obat (opsional)
+          required: false
           schema:
             type: string
+          example: Paracetamol
       responses:
         '200':
-          description: Daftar obat master
+          description: Daftar obat master ditemukan
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  message:
+                    type: string
+                    example: OK
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Obat'
+              example:
+                status: success
+                message: OK
+                data:
+                  - id_obat: 1
+                    nama_obat: Paracetamol 500 mg
+                    stok: 100
+                    harga: 5000
+                  - id_obat: 2
+                    nama_obat: Amoxicillin 500 mg
+                    stok: 50
+                    harga: 12000
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                status: error
+                message: 'Unauthorized: API Key tidak valid atau tidak disertakan'
 
 components:
   securitySchemes:
@@ -125,3 +395,121 @@ components:
       type: apiKey
       in: header
       name: X-API-KEY
+      description: Kunci API untuk akses antarsistem (default pada .env)
+
+  schemas:
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          example: success
+        message:
+          type: string
+          example: Sistem Farmasi operational
+        timestamp:
+          type: string
+          example: '2026-09-28T14:00:00+07:00'
+
+    CreateResepRequest:
+      type: object
+      required: [id_rm, id_pasien, items]
+      properties:
+        id_rm:
+          type: integer
+          example: 1
+        id_pasien:
+          type: integer
+          example: 1
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ResepItemInput'
+
+    ResepItemInput:
+      type: object
+      required: [id_resep, nama_obat, dosis, jumlah, aturan_pakai]
+      properties:
+        id_resep:
+          type: integer
+          example: 10
+        nama_obat:
+          type: string
+          example: Paracetamol 500 mg
+        dosis:
+          type: string
+          example: 500 mg
+        jumlah:
+          type: integer
+          example: 10
+        aturan_pakai:
+          type: string
+          example: 3x1 sesudah makan
+
+    ResepItemDetail:
+      type: object
+      properties:
+        id_resep_masuk:
+          type: integer
+          example: 1
+        id_resep:
+          type: integer
+          example: 10
+        id_rm:
+          type: integer
+          example: 1
+        id_pasien:
+          type: integer
+          example: 1
+        nama_obat:
+          type: string
+          example: Paracetamol 500 mg
+        dosis:
+          type: string
+          example: 500 mg
+        jumlah:
+          type: integer
+          example: 10
+        aturan_pakai:
+          type: string
+          example: 3x1 sesudah makan
+        status:
+          type: string
+          enum: [menunggu, selesai]
+          example: menunggu
+        tgl_masuk:
+          type: string
+          example: '2026-09-28 09:00:00'
+        tgl_selesai:
+          type: string
+          nullable: true
+          example: null
+
+    Obat:
+      type: object
+      properties:
+        id_obat:
+          type: integer
+          example: 1
+        nama_obat:
+          type: string
+          example: Paracetamol 500 mg
+        stok:
+          type: integer
+          example: 100
+        harga:
+          type: number
+          example: 5000
+
+    ErrorResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          example: error
+        message:
+          type: string
+          example: Pesan error
+        errors:
+          type: object
+          nullable: true

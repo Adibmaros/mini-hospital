@@ -2,11 +2,48 @@ openapi: 3.0.3
 info:
   title: Sistem Rekam Medis API
   version: 1.0.0
-  description: API Spesifikasi untuk Sistem Rekam Medis (Poli).
+  description: >
+    API Spesifikasi untuk Sistem Rekam Medis (Port 8002).
+    
+    Dalam arsitektur Mini Hospital EAI, Sistem Rekam Medis bertindak terutama sebagai **konsumen API**
+    (memanggil API Sistem Pendaftaran untuk data kunjungan/pasien dan Sistem Farmasi untuk pengiriman resep obat).
+    
+    Seluruh fungsionalitas utama Rekam Medis (antrean poli, form pemeriksaan dokter, kirim ulang resep,
+    dan riwayat rekam medis pasien) diakses oleh dokter dan tenaga medis melalui antarmuka **Web UI** (Browser).
+    Oleh karena itu, satu-satunya REST API publik yang diekspos oleh sistem ini adalah `GET /api/health`
+    untuk keperluan health check monitoring dan interoperabilitas service orchestration.
+servers:
+  - url: http://localhost:8002
+    description: Sistem Rekam Medis (Port 8002)
+
 paths:
   /api/health:
     get:
       summary: Health Check
+      description: Memeriksa ketersediaan dan status operasional Sistem Rekam Medis.
       responses:
         '200':
           description: Service operational
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+              example:
+                status: success
+                message: Sistem Rekam Medis operational
+                timestamp: '2026-09-28T14:00:00+07:00'
+
+components:
+  schemas:
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          example: success
+        message:
+          type: string
+          example: Sistem Rekam Medis operational
+        timestamp:
+          type: string
+          example: '2026-09-28T14:00:00+07:00'
